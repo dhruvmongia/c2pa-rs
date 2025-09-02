@@ -172,6 +172,9 @@ pub struct Action {
     // The reason why this action was performed, required when the action is `c2pa.redacted`
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 impl Action {
@@ -277,6 +280,13 @@ impl Action {
     /// See <https://c2pa.org/specifications/specifications/1.0/specs/C2PA_Specification.html#_reason>.
     pub fn reason(&self) -> Option<&str> {
         self.reason.as_deref()
+    }
+
+    /// Gets the description of the action, if it exists.
+    ///
+    /// This field is only applicable to the v2 assertion.
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
     }
 
     /// Sets the timestamp for when the action occurred.
@@ -402,6 +412,15 @@ impl Action {
     /// See <https://c2pa.org/specifications/specifications/1.0/specs/C2PA_Specification.html#_reason>.
     pub fn set_reason<S: Into<String>>(mut self, reason: S) -> Self {
         self.reason = Some(reason.into());
+        self
+    }
+
+    /// Sets the description of the action.
+    ///
+    /// This is only present in the v2 actions assertion.
+    /// See <https://spec.c2pa.org/specifications/specifications/1.4/specs/C2PA_Specification.html#_actions>
+    pub fn set_description<S: Into<String>>(mut self, description: S) -> Self {
+        self.description = Some(description.into());
         self
     }
 
