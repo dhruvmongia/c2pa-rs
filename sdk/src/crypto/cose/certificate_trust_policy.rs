@@ -58,6 +58,9 @@ pub struct CertificateTrustPolicy {
 
     /// passthrough mode
     passthrough: bool,
+
+    /// Use only system trust for this check
+    trust_anchors_only: bool,
 }
 
 impl Default for CertificateTrustPolicy {
@@ -68,6 +71,7 @@ impl Default for CertificateTrustPolicy {
             end_entity_cert_set: HashSet::default(),
             additional_ekus: HashSet::default(),
             passthrough: false,
+            trust_anchors_only: false,
         };
 
         this.add_valid_ekus(include_bytes!("./valid_eku_oids.cfg"));
@@ -98,6 +102,7 @@ impl CertificateTrustPolicy {
             end_entity_cert_set: HashSet::default(),
             additional_ekus: HashSet::default(),
             passthrough: false,
+            trust_anchors_only: false,
         }
     }
 
@@ -109,6 +114,7 @@ impl CertificateTrustPolicy {
             end_entity_cert_set: HashSet::default(),
             additional_ekus: HashSet::default(),
             passthrough: true,
+            trust_anchors_only: false,
         }
     }
 
@@ -141,7 +147,7 @@ impl CertificateTrustPolicy {
             return Ok(TrustAnchorType::EndEntity);
         }
 
-        #[cfg(feature = "rust_native_crypto")]
+        #[cfg(any(feature = "rust_native_crypto", target_arch = "wasm32"))]
         {
             return crate::crypto::raw_signature::rust_native::check_certificate_trust::check_certificate_trust(
                 self,
@@ -151,7 +157,10 @@ impl CertificateTrustPolicy {
             );
         }
 
-        #[cfg(feature = "openssl")]
+        #[cfg(all(
+            feature = "openssl",
+            not(all(feature = "rust_native_crypto", target_arch = "wasm32"))
+        ))]
         {
             return crate::crypto::raw_signature::openssl::check_certificate_trust::check_certificate_trust(
                 self,
@@ -214,7 +223,7 @@ impl CertificateTrustPolicy {
 
     /// Add user provided trust anchors that shall be accepted when verifying COSE signatures.
     /// These anchors are distinct from the C2PA trust anchors and are used to validate certificates
-    /// that are not part of the C2PA trust anchors.  
+    /// that are not part of the C2PA trust anchors.
     pub fn add_user_trust_anchors(
         &mut self,
         trust_anchor_pems: &[u8],
@@ -338,6 +347,19 @@ impl CertificateTrustPolicy {
         }
     }
 
+    /// Set whether we only want to use system trust_achors and ignores user_anchors,
+    /// returns last trust_anchors_value
+    pub fn set_trust_anchors_only(&mut self, trust_anchors_only: bool) -> bool {
+        let val = self.trust_anchors_only;
+        self.trust_anchors_only = trust_anchors_only;
+        val
+    }
+
+    /// Get whether we only want to use system trust_achors and ignores user_anchors
+    pub fn trust_anchors_only(&self) -> bool {
+        self.trust_anchors_only
+    }
+
     /// Remove all trust anchors, private credentials, and EKUs previously
     /// configured.
     pub fn clear(&mut self) {
@@ -430,14 +452,20 @@ pub enum CertificateTrustError {
     InternalError(String),
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(all(
+    feature = "openssl",
+    not(all(feature = "rust_native_crypto", target_arch = "wasm32"))
+))]
 impl From<openssl::error::ErrorStack> for CertificateTrustError {
     fn from(err: openssl::error::ErrorStack) -> Self {
         Self::CryptoLibraryError(err.to_string())
     }
 }
 
-#[cfg(feature = "openssl")]
+#[cfg(all(
+    feature = "openssl",
+    not(all(feature = "rust_native_crypto", target_arch = "wasm32"))
+))]
 impl From<crate::crypto::raw_signature::openssl::OpenSslMutexUnavailable>
     for CertificateTrustError
 {

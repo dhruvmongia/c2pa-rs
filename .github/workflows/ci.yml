@@ -9,6 +9,9 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
+    branches:
+      - main
+      - v1_api
     types:
       - opened
       - reopened
@@ -17,6 +20,7 @@ on:
   push:
     branches:
       - main
+      - v1_api
 
 jobs:
   get-features:
@@ -27,7 +31,7 @@ jobs:
       openssl-features: ${{ steps.get-features.outputs.openssl-features }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -57,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -106,7 +110,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -122,9 +126,9 @@ jobs:
       - name: Generate code coverage for rust_native_crypto
         env:
           RUST_BACKTRACE: "1"
-          FEATURES: ${{needs.get-features.outputs.rust_native_crypto-features}}
+          FEATURES: ${{needs.get-features.outputs.rust-native-features}}
         run: |
-          cargo llvm-cov --lib --features "$FEATURES" --lcov --output-path lcov-rust_native_crypto.info
+          cargo llvm-cov -p c2pa --no-default-features --features "$FEATURES" --lcov --output-path lcov-rust_native_crypto.info
 
       # Tokens aren't available for PRs originating from forks,
       # so we don't attempt to upload code coverage in that case.
@@ -155,7 +159,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -209,7 +213,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -265,7 +269,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -290,7 +294,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -299,7 +303,7 @@ jobs:
         id: setup-chrome
         uses: browser-actions/setup-chrome@v2
         with:
-          chrome-version: 138
+          chrome-version: 140
           install-chromedriver: true
 
       - name: Install wasm-pack
@@ -310,6 +314,43 @@ jobs:
         working-directory: ./sdk
         env:
           WASM_BINDGEN_TEST_TIMEOUT: 60
+
+  benchmarks:
+    name: Run benchmarks on signing and reading
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.author_association == 'COLLABORATOR' ||
+      github.event.pull_request.author_association == 'MEMBER' ||
+      github.event.pull_request.user.login == 'dependabot[bot]' ||
+      contains(github.event.pull_request.labels.*.name, 'safe to test')
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-codspeed
+        run: cargo binstall --no-confirm cargo-codspeed
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build the benchmark target(s)
+        run: cargo codspeed build -p c2pa --no-default-features --features rust_native_crypto
+
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: instrumentation
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
 
   tests-wasi:
     name: Unit tests (WASI)
@@ -339,16 +380,10 @@ jobs:
           curl https://wasmtime.dev/install.sh -sSf | bash
           echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
 
-      - name: Install WASI SDK
+      - name: Install clang
         run: |
-          if [ "${RUNNER_ARCH}" = "X64" ]; then
-            ARCH="x86_64";
-          else
-            ARCH="${RUNNER_ARCH}";
-          fi
-          wget https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-${ARCH}-${RUNNER_OS}.tar.gz
-          tar xf wasi-sdk-25.0-${ARCH}-${RUNNER_OS}.tar.gz
-          mv $(echo wasi-sdk-25.0-${ARCH}-${RUNNER_OS} | tr '[:upper:]' '[:lower:]') /opt/wasi-sdk
+          sudo apt-get update
+          sudo apt-get install -y clang
 
       - name: Add wasm32-wasip2 target
         run: rustup target add --toolchain nightly-2025-08-25 wasm32-wasip2
@@ -358,9 +393,8 @@ jobs:
 
       - name: Run WASI tests (c2pa-rs)
         env:
-          CARGO_TARGET_WASM32_WASIP2_RUNNER: "wasmtime -S cli -S http --dir ."
-          CC: /opt/wasi-sdk/bin/clang
-          WASI_SDK_PATH: /opt/wasi-sdk
+          CARGO_TARGET_WASM32_WASIP2_RUNNER: "wasmtime -S cli -S http --dir . --env GITHUB_ACTIONS=${GITHUB_ACTIONS}"
+          CC: clang
           RUST_MIN_STACK: 16777216
           FEATURES: ${{needs.get-features.outputs.rust-native-features}}
         run: |
@@ -380,7 +414,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -409,7 +443,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install nightly toolchain
         uses: dtolnay/rust-toolchain@master
@@ -433,7 +467,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Audit crate dependencies
         uses: EmbarkStudios/cargo-deny-action@v2

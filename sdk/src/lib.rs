@@ -14,7 +14,7 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![deny(clippy::unwrap_used)]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg, doc_cfg_hide))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! This library supports reading, creating, and embedding C2PA data
 //! for a variety of asset types.
@@ -25,7 +25,9 @@
 //! The library has a Builder/Reader API that focuses on simplicity
 //! and stream support.
 //!
-//! ## Example: Reading a ManifestStore
+//! # Examples
+//!
+//! ## Reading a manifest
 //!
 //! ```
 //! # use c2pa::Result;
@@ -46,7 +48,7 @@
 //! # }
 //! ```
 //!
-//! ## Example: Adding a Manifest to a file
+//! ## Adding a manifest to a file
 //!
 //! ```ignore-wasm32
 //! # use c2pa::Result;
@@ -86,6 +88,18 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Features
+//!
+//! You can enable any of the following features:
+//!
+//! - **openssl** *(enabled by default)*: Use the vendored `openssl` implementation for cryptography.
+//! - **rust_native_crypto**: Use Rust native cryptography.
+//! - **add_thumbnails**: Adds the [`image`](https://github.com/image-rs/image) crate to enable auto-generated thumbnails, if possible and enabled in settings.
+//! - **fetch_remote_manifests**: Fetches remote manifests over the network when no embedded manifest is present and that option is enabled in settings.
+//! - **file_io**: Enables APIs that use filesystem I/O.
+//! - **json_schema**: Adds the [`schemars`](https://github.com/GREsau/schemars) crate to derive JSON schemas for JSON-compatible structs.
+//! - **pdf**: Enables basic PDF read support.
 
 /// The internal name of the C2PA SDK
 pub const NAME: &str = "c2pa-rs";
@@ -136,9 +150,7 @@ pub mod validation_status;
 pub use assertions::DigitalSourceType;
 #[doc(inline)]
 pub use assertions::Relationship;
-#[cfg(feature = "v1_api")]
-pub use asset_io::{CAIRead, CAIReadWrite};
-pub use builder::{Builder, ManifestDefinition};
+pub use builder::{Builder, BuilderIntent, ManifestDefinition};
 pub use callback_signer::{CallbackFunc, CallbackSigner};
 pub use claim_generator_info::ClaimGeneratorInfo;
 // pub use dynamic_assertion::{
@@ -155,15 +167,9 @@ pub use ingredient::Ingredient;
 pub use ingredient::{DefaultOptions, IngredientOptions};
 pub use manifest::{Manifest, SignatureInfo};
 pub use manifest_assertion::{ManifestAssertion, ManifestAssertionKind};
-#[cfg(feature = "v1_api")]
-pub use manifest_store::ManifestStore;
-#[cfg(feature = "v1_api")]
-pub use manifest_store_report::ManifestStoreReport;
 pub use reader::Reader;
 #[doc(inline)]
 pub use resource_store::{ResourceRef, ResourceStore};
-#[cfg(feature = "v1_api")]
-pub use signer::RemoteSigner;
 pub use signer::{AsyncSigner, Signer};
 pub use utils::mime::format_from_path;
 #[doc(inline)]
@@ -188,8 +194,6 @@ pub(crate) mod jumbf;
 
 pub(crate) mod manifest;
 pub(crate) mod manifest_assertion;
-#[cfg(feature = "v1_api")]
-pub(crate) mod manifest_store;
 pub(crate) mod manifest_store_report;
 
 #[allow(dead_code)]
@@ -203,11 +207,5 @@ pub(crate) mod store;
 pub(crate) mod utils;
 pub(crate) use utils::{cbor_types, hash_utils};
 
-#[cfg(all(feature = "openssl", feature = "rust_native_crypto"))]
-compile_error!("Features 'openssl' and 'rust_native_crypto' cannot be enabled at the same time.");
-
 #[cfg(not(any(feature = "openssl", feature = "rust_native_crypto")))]
 compile_error!("Either 'openssl' or 'rust_native_crypto' feature must be enabled.");
-
-#[cfg(all(feature = "openssl", target_arch = "wasm32"))]
-compile_error!("Feature 'openssl' is not available for wasm32.");
