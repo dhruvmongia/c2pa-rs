@@ -124,7 +124,7 @@ impl DidBuf {
         }
     }
 
-    pub fn as_did(&self) -> Did {
+    pub fn as_did(&self) -> Did<'_> {
         unsafe {
             // SAFETY: we validated the data in `Self::new`.
             Did::new_unchecked(&self.0)
